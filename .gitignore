@@ -46,3 +46,8 @@ yarn-error.log*
 *.sw?
 .idea/
 .vscode/
+
+# Node.js standalone runtime
+.node/
+royaltyflow.db
+deployments/
