@@ -1,0 +1,18 @@
+{
+  "name": "royaltyflow-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "RoyaltyFlow - Digital royalty revenue distribution platform",
+  "workspaces": [
+    "web",
+    "contracts"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=web",
+    "build:web": "npm run build --workspace=web",
+    "dev:api": "cd api && uvicorn main:app --reload --port 8000",
+    "compile:contracts": "npm run compile --workspace=contracts",
+    "test:contracts": "npm run test --workspace=contracts",
+    "deploy:fuji": "npm run deploy:fuji --workspace=contracts"
+  }
+}
