@@ -1,18 +1,35 @@
 {
-  "name": "royaltyflow-monorepo",
-  "version": "1.0.0",
+  "name": "web",
+  "version": "0.1.0",
   "private": true,
-  "description": "RoyaltyFlow - Digital royalty revenue distribution platform",
-  "workspaces": [
-    "web",
-    "contracts"
-  ],
   "scripts": {
-    "dev:web": "npm run dev --workspace=web",
-    "build:web": "npm run build --workspace=web",
-    "dev:api": "cd api && uvicorn main:app --reload --port 8000",
-    "compile:contracts": "npm run compile --workspace=contracts",
-    "test:contracts": "npm run test --workspace=contracts",
-    "deploy:fuji": "npm run deploy:fuji --workspace=contracts"
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.59.0",
+    "@x402/core": "^2.31.0",
+    "@x402/evm": "^2.31.0",
+    "@x402/extensions": "^2.31.0",
+    "@x402/svm": "^2.31.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.453.0",
+    "next": "^14.2.15",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.5.4",
+    "viem": "^2.21.26",
+    "wagmi": "^2.12.18"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.6.3"
   }
 }
