@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAccount, useConnect, useDisconnect, useBalance } from "wagmi";
-import { injected } from "wagmi/connectors";
+import { useAccount, useConnect, useDisconnect, useBalance, injected } from "wagmi";
 import { useState, useEffect } from "react";
+import { DEMO_ACCOUNTS, installDemoEthereumProvider } from "@/lib/config";
 import {
   Layers,
   Sparkles,
@@ -21,15 +21,51 @@ import {
 export function Navbar() {
   const pathname = usePathname();
   const { address, isConnected, chain } = useAccount();
-  const { connect } = useConnect();
+  const { connectAsync } = useConnect();
   const { disconnect } = useDisconnect();
   const { data: balanceData } = useBalance({ address });
   const [mounted, setMounted] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isDemoWallet, setIsDemoWallet] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    if (typeof window !== "undefined" && (window as any).ethereum?.isRoyaltyFlowDemo) {
+      setIsDemoWallet(true);
+    }
   }, []);
+
+  const handleConnect = async (forceDemo = false) => {
+    try {
+      if (
+        forceDemo ||
+        typeof window === "undefined" ||
+        !(window as any).ethereum ||
+        (window as any).ethereum?.isRoyaltyFlowDemo
+      ) {
+        installDemoEthereumProvider(DEMO_ACCOUNTS[0].address);
+        setIsDemoWallet(true);
+      }
+      await connectAsync({ connector: injected() });
+    } catch (err) {
+      // Nếu ví trình duyệt bị khoá / từ chối / lỗi, tự động chuyển sang Ví Mô Phỏng để người dùng test mượt mà
+      installDemoEthereumProvider(DEMO_ACCOUNTS[0].address);
+      setIsDemoWallet(true);
+      try {
+        await connectAsync({ connector: injected() });
+      } catch (innerErr) {
+        console.error("Wallet connect error:", innerErr);
+      }
+    }
+  };
+
+  const handleSwitchDemoAccount = (newAddr: string) => {
+    const provider = installDemoEthereumProvider(newAddr);
+    setIsDemoWallet(true);
+    if (provider) {
+      provider.setAccount(newAddr);
+    }
+  };
 
   const navLinks = [
     { href: "/studio", label: "Studio", icon: Sparkles },
@@ -72,11 +108,10 @@ export function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-slate-800/80 text-cyan-400 shadow-sm border border-slate-700/60"
-                    : "text-slate-400 hover:text-white hover:bg-slate-900"
-                }`}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isActive
+                  ? "bg-slate-800/80 text-cyan-400 shadow-sm border border-slate-700/60"
+                  : "text-slate-400 hover:text-white hover:bg-slate-900"
+                  }`}
               >
                 <Icon className="h-4 w-4" />
                 <span>{link.label}</span>
@@ -89,10 +124,26 @@ export function Navbar() {
         <div className="flex items-center space-x-3">
           {mounted && isConnected && address ? (
             <div className="flex items-center space-x-2">
+              {/* Role Switcher for Simulation */}
+              {isDemoWallet && (
+                <select
+                  value={address}
+                  onChange={(e) => handleSwitchDemoAccount(e.target.value)}
+                  className="hidden lg:block px-2.5 py-1 rounded-lg bg-indigo-950/60 border border-indigo-700/60 text-[11px] font-medium text-indigo-200 focus:outline-none cursor-pointer"
+                  title="Đổi vai trò ví mô phỏng"
+                >
+                  {DEMO_ACCOUNTS.map((acc) => (
+                    <option key={acc.address} value={acc.address} className="bg-slate-900 text-white">
+                      🎭 {acc.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+
               {/* Chain Badge */}
               <div className="hidden sm:flex items-center space-x-1 px-2.5 py-1 bg-red-950/40 border border-red-800/40 rounded-full text-[11px] font-medium text-red-400">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                <span>{chain?.name || "Avalanche Fuji"}</span>
+                <span>{isDemoWallet ? "Fuji (Mô phỏng)" : chain?.name || "Avalanche Fuji"}</span>
               </div>
 
               {/* Balance & Address */}
@@ -108,20 +159,29 @@ export function Navbar() {
                 <button
                   onClick={() => disconnect()}
                   title="Disconnect Wallet"
-                  className="p-1 ml-1 text-slate-400 hover:text-red-400 transition-colors"
+                  className="p-1 ml-1 text-slate-400 hover:text-red-400 transition-colors cursor-pointer"
                 >
                   <LogOut className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
           ) : (
-            <button
-              onClick={() => connect({ connector: injected() })}
-              className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-medium text-sm shadow-md shadow-cyan-500/20 hover:shadow-cyan-500/30 transition-all cursor-pointer"
-            >
-              <Wallet className="h-4 w-4" />
-              <span>Connect Wallet</span>
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handleConnect(false)}
+                className="flex items-center space-x-2 px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-medium text-sm shadow-md shadow-cyan-500/20 hover:shadow-cyan-500/30 transition-all cursor-pointer"
+              >
+                <Wallet className="h-4 w-4" />
+                <span>Connect Wallet</span>
+              </button>
+              <button
+                onClick={() => handleConnect(true)}
+                className="hidden sm:flex items-center space-x-1.5 px-3 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 border border-indigo-500/40 text-indigo-300 font-medium text-xs transition-all cursor-pointer"
+                title="Kết nối ngay bằng Ví Mô Phỏng (không cần cài MetaMask)"
+              >
+                <span>🎭 Ví Mô Phỏng</span>
+              </button>
+            </div>
           )}
 
           {/* Mobile hamburger */}
@@ -145,11 +205,10 @@ export function Navbar() {
                 key={link.href}
                 href={link.href}
                 onClick={() => setMobileMenuOpen(false)}
-                className={`flex items-center space-x-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-slate-800 text-cyan-400 border border-slate-700/60"
-                    : "text-slate-400 hover:text-white hover:bg-slate-900"
-                }`}
+                className={`flex items-center space-x-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive
+                  ? "bg-slate-800 text-cyan-400 border border-slate-700/60"
+                  : "text-slate-400 hover:text-white hover:bg-slate-900"
+                  }`}
               >
                 <Icon className="h-4 w-4" />
                 <span>{link.label}</span>

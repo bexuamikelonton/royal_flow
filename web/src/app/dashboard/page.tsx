@@ -31,6 +31,8 @@ export default function DashboardPage() {
   const { address, isConnected } = useAccount();
   const [isWithdrawingUsdc, setIsWithdrawingUsdc] = useState(false);
   const [isWithdrawingAvax, setIsWithdrawingAvax] = useState(false);
+  const [usdcClaimed, setUsdcClaimed] = useState(false);
+  const [avaxClaimed, setAvaxClaimed] = useState(false);
   const [claimMessage, setClaimMessage] = useState<string | null>(null);
 
   const { writeContractAsync } = useWriteContract();
@@ -51,15 +53,19 @@ export default function DashboardPage() {
     args: address ? ["0x0000000000000000000000000000000000000000", address] : undefined,
   });
 
-  const usdcPending = rawUsdcBalance
+  const usdcPending = usdcClaimed
+    ? 0.0
+    : rawUsdcBalance && Number(rawUsdcBalance) > 0
     ? Number(rawUsdcBalance) / 1000000
-    : 50.0; // Fallback mock 50 USDC for author A test demo
-  const avaxPending = rawAvaxBalance
+    : 60.0; // Fallback mock 60 USDC (50 + 10) for author A test demo
+  const avaxPending = avaxClaimed
+    ? 0.0
+    : rawAvaxBalance && Number(rawAvaxBalance) > 0
     ? Number(rawAvaxBalance) / 1e18
     : 0.75; // Fallback mock 0.75 AVAX for test demo
 
   // Historical Payouts Ledger
-  const [history] = useState<PayoutRecord[]>([
+  const [history, setHistory] = useState<PayoutRecord[]>([
     {
       id: "pay-1",
       txHash: "0x8a92b1c4e7d58f3a0c2e4b6d8f1a3c5e7b9d0f2a4c6e8b1d3f5a7c9e0b2d4f6a",
@@ -107,6 +113,10 @@ export default function DashboardPage() {
         args: [CONTRACT_ADDRESSES.mockUSDC],
       });
 
+      setUsdcClaimed(true);
+      setHistory((prev) =>
+        prev.map((item) => (item.token === "USDC" ? { ...item, status: "CLAIMED" } : item))
+      );
       setClaimMessage("RÚT TIỀN THÀNH CÔNG: Số dư USDC đã được chuyển thẳng về ví của bạn!");
       refetchUsdc();
     } catch (err: any) {
@@ -135,6 +145,10 @@ export default function DashboardPage() {
         args: ["0x0000000000000000000000000000000000000000"],
       });
 
+      setAvaxClaimed(true);
+      setHistory((prev) =>
+        prev.map((item) => (item.token === "AVAX" ? { ...item, status: "CLAIMED" } : item))
+      );
       setClaimMessage("RÚT TIỀN THÀNH CÔNG: Số dư AVAX đã được gửi về ví an toàn!");
       refetchAvax();
     } catch (err: any) {
