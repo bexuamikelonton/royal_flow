@@ -1,11 +1,11 @@
 // ABI and deployed contract addresses for RoyaltyFlow Web Application
 
 export const CONTRACT_ADDRESSES = {
-  mockUSDC: (process.env.NEXT_PUBLIC_MOCK_USDC_ADDRESS || "0x5412497645F3aA76b50eB2aEc59c77c908587b1c") as `0x${string}`,
-  contentRegistry: (process.env.NEXT_PUBLIC_CONTENT_REGISTRY_ADDRESS || "0x789b5c3F3c8340dAfE942D5eB684F66a2E4b2160") as `0x${string}`,
-  royaltySplitter: (process.env.NEXT_PUBLIC_ROYALTY_SPLITTER_ADDRESS || "0xa522A00E9C7330755F19652a21F24FE3956E3d23") as `0x${string}`,
-  paymentVault: (process.env.NEXT_PUBLIC_PAYMENT_VAULT_ADDRESS || "0xE61099f18731f24C32439169faA361e272a08892") as `0x${string}`,
-  licenseManager: (process.env.NEXT_PUBLIC_LICENSE_MANAGER_ADDRESS || "0x6E57E88a2a8b9f71c4cFE7CDEc7e0c4D99bEb86B") as `0x${string}`,
+  mockUSDC: (process.env.NEXT_PUBLIC_MOCK_USDC_ADDRESS || "0xd4982321D81420F4504AFf00FDACaB626a19bC7F") as `0x${string}`,
+  contentRegistry: (process.env.NEXT_PUBLIC_CONTENT_REGISTRY_ADDRESS || "0x36F9912d229dAC5F8e061633B0240E9dCFbdCc0e") as `0x${string}`,
+  royaltySplitter: (process.env.NEXT_PUBLIC_ROYALTY_SPLITTER_ADDRESS || "0x2D61b88c0eA9eD339aEa3a6398D1DCFA663167aB") as `0x${string}`,
+  paymentVault: (process.env.NEXT_PUBLIC_PAYMENT_VAULT_ADDRESS || "0x4134E62861DCF203C86Db99352f693903894aC5f") as `0x${string}`,
+  licenseManager: (process.env.NEXT_PUBLIC_LICENSE_MANAGER_ADDRESS || "0x6cD504472999f4cfCAb86dddB3d8967d1647538d") as `0x${string}`,
 };
 
 export const MOCK_USDC_ABI = [

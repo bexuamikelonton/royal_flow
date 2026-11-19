@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAccount, useReadContract, useWriteContract } from "wagmi";
 import {
   LayoutDashboard,
@@ -16,6 +16,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { CONTRACT_ADDRESSES, PAYMENT_VAULT_ABI } from "@/lib/contracts";
+import { ensureAvalancheFuji, FUJI_CHAIN_ID } from "@/lib/config";
 
 interface PayoutRecord {
   id: string;
@@ -53,17 +54,6 @@ export default function DashboardPage() {
     args: address ? ["0x0000000000000000000000000000000000000000", address] : undefined,
   });
 
-  const usdcPending = usdcClaimed
-    ? 0.0
-    : rawUsdcBalance && Number(rawUsdcBalance) > 0
-    ? Number(rawUsdcBalance) / 1000000
-    : 60.0; // Fallback mock 60 USDC (50 + 10) for author A test demo
-  const avaxPending = avaxClaimed
-    ? 0.0
-    : rawAvaxBalance && Number(rawAvaxBalance) > 0
-    ? Number(rawAvaxBalance) / 1e18
-    : 0.75; // Fallback mock 0.75 AVAX for test demo
-
   // Historical Payouts Ledger
   const [history, setHistory] = useState<PayoutRecord[]>([
     {
@@ -95,6 +85,45 @@ export default function DashboardPage() {
     },
   ]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("royaltyflow_payouts");
+      if (saved) {
+        try {
+          const customPayouts: PayoutRecord[] = JSON.parse(saved);
+          if (customPayouts.length > 0) {
+            setHistory((prev) => {
+              const existingIds = new Set(prev.map((p) => p.id));
+              const filtered = customPayouts.filter((c) => !existingIds.has(c.id));
+              return [...filtered, ...prev];
+            });
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+  }, []);
+
+  const computedUsdcFromHistory = history
+    .filter((h) => h.token === "USDC" && h.status === "WITHDRAWABLE")
+    .reduce((sum, h) => sum + h.amount, 0);
+
+  const computedAvaxFromHistory = history
+    .filter((h) => h.token === "AVAX" && h.status === "WITHDRAWABLE")
+    .reduce((sum, h) => sum + h.amount, 0);
+
+  const usdcPending = usdcClaimed
+    ? 0.0
+    : rawUsdcBalance && Number(rawUsdcBalance) > 0
+    ? Number(rawUsdcBalance) / 1000000
+    : computedUsdcFromHistory;
+  const avaxPending = avaxClaimed
+    ? 0.0
+    : rawAvaxBalance && Number(rawAvaxBalance) > 0
+    ? Number(rawAvaxBalance) / 1e18
+    : computedAvaxFromHistory;
+
   // Withdraw USDC handler
   const handleWithdrawUsdc = async () => {
     if (!isConnected || !address) {
@@ -106,7 +135,9 @@ export default function DashboardPage() {
     setClaimMessage("Đang thực hiện giao dịch rút USDC từ PaymentVault...");
 
     try {
+      await ensureAvalancheFuji();
       await writeContractAsync({
+        chainId: FUJI_CHAIN_ID,
         address: CONTRACT_ADDRESSES.paymentVault,
         abi: PAYMENT_VAULT_ABI,
         functionName: "withdraw",
@@ -114,9 +145,18 @@ export default function DashboardPage() {
       });
 
       setUsdcClaimed(true);
-      setHistory((prev) =>
-        prev.map((item) => (item.token === "USDC" ? { ...item, status: "CLAIMED" } : item))
-      );
+      setHistory((prev) => {
+        const updated = prev.map((item) =>
+          item.token === "USDC" ? { ...item, status: "CLAIMED" as const } : item
+        );
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            "royaltyflow_payouts",
+            JSON.stringify(updated.filter((i) => !["pay-1", "pay-2", "pay-3"].includes(i.id)))
+          );
+        }
+        return updated;
+      });
       setClaimMessage("RÚT TIỀN THÀNH CÔNG: Số dư USDC đã được chuyển thẳng về ví của bạn!");
       refetchUsdc();
     } catch (err: any) {
@@ -138,7 +178,9 @@ export default function DashboardPage() {
     setClaimMessage("Đang thực hiện giao dịch rút Native AVAX từ PaymentVault...");
 
     try {
+      await ensureAvalancheFuji();
       await writeContractAsync({
+        chainId: FUJI_CHAIN_ID,
         address: CONTRACT_ADDRESSES.paymentVault,
         abi: PAYMENT_VAULT_ABI,
         functionName: "withdraw",
@@ -146,9 +188,18 @@ export default function DashboardPage() {
       });
 
       setAvaxClaimed(true);
-      setHistory((prev) =>
-        prev.map((item) => (item.token === "AVAX" ? { ...item, status: "CLAIMED" } : item))
-      );
+      setHistory((prev) => {
+        const updated = prev.map((item) =>
+          item.token === "AVAX" ? { ...item, status: "CLAIMED" as const } : item
+        );
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            "royaltyflow_payouts",
+            JSON.stringify(updated.filter((i) => !["pay-1", "pay-2", "pay-3"].includes(i.id)))
+          );
+        }
+        return updated;
+      });
       setClaimMessage("RÚT TIỀN THÀNH CÔNG: Số dư AVAX đã được gửi về ví an toàn!");
       refetchAvax();
     } catch (err: any) {

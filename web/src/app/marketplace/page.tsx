@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useAccount, useWriteContract, useReadContract } from "wagmi";
+import { useState, useEffect } from "react";
+import { useAccount, useWriteContract, useReadContract, usePublicClient } from "wagmi";
 import {
   ShoppingBag,
   ExternalLink,
@@ -25,6 +25,7 @@ import {
   MOCK_USDC_ABI,
   LICENSE_MANAGER_ABI,
 } from "@/lib/contracts";
+import { ensureAvalancheFuji, FUJI_CHAIN_ID } from "@/lib/config";
 
 interface MarketplaceItem {
   tierId: number;
@@ -51,15 +52,16 @@ export default function MarketplacePage() {
   const [isFauceting, setIsFauceting] = useState(false);
 
   const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
 
   // Sample items representing on-chain state & registered works
-  const [items] = useState<MarketplaceItem[]>([
+  const [items, setItems] = useState<MarketplaceItem[]>([
     {
       tierId: 1,
       contentId: 1,
       title: "Cyberpunk Ambient Soundtrack EP",
       category: "Music",
-      primaryCreator: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+      primaryCreator: "0x007055a558eA6C6d7612cE04628Ce46Ad75537c0",
       licenseType: "COMMERCIAL",
       price: 100,
       paymentToken: "USDC",
@@ -89,9 +91,9 @@ export default function MarketplacePage() {
       contentId: 3,
       title: "Avalanche Subnet 3D Hologram Asset",
       category: "3D",
-      primaryCreator: "0x9965507D1a55bcC2695C58ba16FB37d819B0A4df",
+      primaryCreator: "0x007055a558eA6C6d7612cE04628Ce46Ad75537c0",
       licenseType: "DERIVATIVE_ALLOW",
-      price: 1.5,
+      price: 0.01,
       paymentToken: "AVAX",
       ipfsCid: "QmU7p3N2L9aJ8V6R2vQ8L7c3kXw1mP9bX4uE6vW7zY8qP3",
       parentContentId: 0,
@@ -116,6 +118,26 @@ export default function MarketplacePage() {
     },
   ]);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("royaltyflow_custom_items");
+      if (saved) {
+        try {
+          const customItems: MarketplaceItem[] = JSON.parse(saved);
+          if (customItems.length > 0) {
+            setItems((prev) => {
+              const existingIds = new Set(prev.map((i) => i.tierId));
+              const filtered = customItems.filter((c) => !existingIds.has(c.tierId));
+              return [...filtered, ...prev];
+            });
+          }
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+  }, []);
+
   // Faucet MockUSDC for testing
   const handleClaimFaucet = async () => {
     if (!isConnected || !address) {
@@ -125,8 +147,10 @@ export default function MarketplacePage() {
 
     setIsFauceting(true);
     try {
+      await ensureAvalancheFuji();
       const hundredUsdc = 100n * 1000000n; // 100 USDC with 6 decimals
       await writeContractAsync({
+        chainId: FUJI_CHAIN_ID,
         address: CONTRACT_ADDRESSES.mockUSDC,
         abi: MOCK_USDC_ABI,
         functionName: "faucet",
@@ -156,41 +180,92 @@ export default function MarketplacePage() {
     setTxMessage(`Đang chuẩn bị mua giấy phép cho "${item.title}"...`);
 
     try {
+      await ensureAvalancheFuji();
+      const isDemo =
+        typeof window !== "undefined" && (window as any).ethereum?.isRoyaltyFlowDemo;
+
+      let lastTxHash = "0x8a92b1c4e7d58f3a0c2e4b6d8f1a3c5e7b9d0f2a4c6e8b1d3f5a7c9e0b2d4f6a";
       if (item.paymentToken === "USDC") {
         const priceAmount = BigInt(item.price) * 1000000n;
 
         // Step 1: Approve MockUSDC to LicenseManager
         setTxMessage("Bước 1/2: Đang phê duyệt (Approve) MockUSDC cho LicenseManager...");
-        await writeContractAsync({
+        const approveTx = await writeContractAsync({
+          chainId: FUJI_CHAIN_ID,
           address: CONTRACT_ADDRESSES.mockUSDC,
           abi: MOCK_USDC_ABI,
           functionName: "approve",
           args: [CONTRACT_ADDRESSES.licenseManager, priceAmount],
         });
 
+        if (!isDemo && publicClient) {
+          setTxMessage("Đang chờ xác nhận giao dịch Approve trên Avalanche Fuji...");
+          await publicClient.waitForTransactionReceipt({ hash: approveTx });
+        }
+
         // Step 2: Call purchaseLicense
         setTxMessage("Bước 2/2: Đang thực hiện thanh toán purchaseLicense và phân bổ BPS...");
-        await writeContractAsync({
+        const buyTx = await writeContractAsync({
+          chainId: FUJI_CHAIN_ID,
           address: CONTRACT_ADDRESSES.licenseManager,
           abi: LICENSE_MANAGER_ABI,
           functionName: "purchaseLicense",
           args: [BigInt(item.tierId)],
         });
+        lastTxHash = buyTx;
+
+        if (!isDemo && publicClient) {
+          setTxMessage("Đang chờ xác nhận giao dịch mua trên Avalanche Fuji...");
+          await publicClient.waitForTransactionReceipt({ hash: buyTx });
+        }
       } else {
         // Native AVAX
-        const priceAmount = BigInt(item.price * 1e18);
+        const priceAmount = BigInt(Math.round(item.price * 1e18));
         setTxMessage("Đang thanh toán purchaseLicense bằng Native AVAX...");
-        await writeContractAsync({
+        const buyTx = await writeContractAsync({
+          chainId: FUJI_CHAIN_ID,
           address: CONTRACT_ADDRESSES.licenseManager,
           abi: LICENSE_MANAGER_ABI,
           functionName: "purchaseLicense",
           args: [BigInt(item.tierId)],
           value: priceAmount,
         });
+        lastTxHash = buyTx;
+
+        if (!isDemo && publicClient) {
+          setTxMessage("Đang chờ xác nhận giao dịch mua trên Avalanche Fuji...");
+          await publicClient.waitForTransactionReceipt({ hash: buyTx });
+        }
+      }
+
+      // Lưu lịch sử phân bổ doanh thu để hiển thị tức thì bên trang Revenue Dashboard (/dashboard)
+      if (typeof window !== "undefined") {
+        const existingRaw = localStorage.getItem("royaltyflow_payouts");
+        const existingPayouts = existingRaw ? JSON.parse(existingRaw) : [];
+        const authorShare =
+          item.parentContentId > 0
+            ? Number(((item.price * (item.upstreamBps / 10000)) * 0.5).toFixed(2))
+            : Number((item.price * 0.5).toFixed(4));
+        const newPayout = {
+          id: `pay-${Date.now()}`,
+          txHash: lastTxHash,
+          contentTitle:
+            item.parentContentId > 0
+              ? `${item.title} (Trích nộp Phái sinh #${item.contentId} -> #${item.parentContentId})`
+              : `${item.title} (#${item.contentId})`,
+          amount: authorShare,
+          token: item.paymentToken,
+          date: "Vừa xong",
+          status: "WITHDRAWABLE",
+        };
+        localStorage.setItem(
+          "royaltyflow_payouts",
+          JSON.stringify([newPayout, ...existingPayouts])
+        );
       }
 
       setTxMessage(
-        `THÀNH CÔNG: Đã mua bản quyền "${item.title}"! Doanh thu đã được hạch toán tức thì vào PaymentVault của các đồng tác giả.`
+        `THÀNH CÔNG: Đã mua bản quyền "${item.title}"! Doanh thu đã được hạch toán tức thì vào PaymentVault (xem ngay tại /dashboard).`
       );
     } catch (err: any) {
       console.error(err);

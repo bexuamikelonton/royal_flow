@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useAccount, useWriteContract } from "wagmi";
+import { useAccount, useWriteContract, usePublicClient } from "wagmi";
 import {
   Upload,
   Sparkles,
@@ -23,6 +23,7 @@ import {
   ROYALTY_SPLITTER_ABI,
   LICENSE_MANAGER_ABI,
 } from "@/lib/contracts";
+import { ensureAvalancheFuji, FUJI_CHAIN_ID } from "@/lib/config";
 
 interface Recipient {
   id: string;
@@ -83,6 +84,7 @@ export default function StudioPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
 
   // Calculate total percentage & BPS
   const totalPercentage = recipients.reduce((sum, r) => sum + Number(r.percentage || 0), 0);
@@ -203,35 +205,60 @@ export default function StudioPage() {
     }
 
     setIsSubmitting(true);
-    setRegStatus("Bước 1/3: Đang ghi danh tác phẩm vào ContentRegistry...");
+    setRegStatus("Đang kiểm tra và chuyển ví sang mạng Avalanche Fuji (Chain ID: 43113)...");
 
     try {
+      await ensureAvalancheFuji();
+      setRegStatus("Bước 1/3: Đang ghi danh tác phẩm vào ContentRegistry...");
       const parentId = isDerivative ? BigInt(parentContentId) : 0n;
+
+      const isDemo =
+        typeof window !== "undefined" && (window as any).ethereum?.isRoyaltyFlowDemo;
 
       // 1. Register Content
       const regTx = await writeContractAsync({
+        chainId: FUJI_CHAIN_ID,
         address: CONTRACT_ADDRESSES.contentRegistry,
         abi: CONTENT_REGISTRY_ABI,
         functionName: "registerContent",
         args: [ipfsCid, sha256Hash as `0x${string}`, parentId],
       });
 
-      setRegStatus("Bước 2/3: Đang cấu hình tỷ lệ phân chia BPS trong RoyaltySplitter...");
+      let targetContentId = 1n;
+      if (!isDemo && publicClient) {
+        setRegStatus("Đang chờ mạng Avalanche Fuji xác nhận Bước 1/3...");
+        await publicClient.waitForTransactionReceipt({ hash: regTx });
+        const total = await publicClient.readContract({
+          address: CONTRACT_ADDRESSES.contentRegistry,
+          abi: CONTENT_REGISTRY_ABI,
+          functionName: "totalContents",
+        });
+        if (total && total > 0n) {
+          targetContentId = total;
+        }
+      }
+
+      setRegStatus(
+        `Bước 2/3: Đang cấu hình tỷ lệ phân chia BPS cho Tác phẩm #${targetContentId.toString()}...`
+      );
 
       // Prepare split parameters
       const targets = recipients.map((r) => r.wallet as `0x${string}`);
       const bpsShares = recipients.map((r) => BigInt(Math.round(r.percentage * 100)));
       const upBps = isDerivative ? BigInt(upstreamBps) : 0n;
 
-      // In real scenario, read new contentId from event or use next ID (assuming 1 for MVP)
-      const targetContentId = 1n;
-
-      await writeContractAsync({
+      const splitTx = await writeContractAsync({
+        chainId: FUJI_CHAIN_ID,
         address: CONTRACT_ADDRESSES.royaltySplitter,
         abi: ROYALTY_SPLITTER_ABI,
         functionName: "setSplits",
         args: [targetContentId, targets, bpsShares, upBps],
       });
+
+      if (!isDemo && publicClient) {
+        setRegStatus("Đang chờ mạng Avalanche Fuji xác nhận Bước 2/3...");
+        await publicClient.waitForTransactionReceipt({ hash: splitTx });
+      }
 
       setRegStatus("Bước 3/3: Đang tạo gói giấy phép thương mại trong LicenseManager...");
 
@@ -245,14 +272,58 @@ export default function StudioPage() {
           ? BigInt(licensePrice) * 1000000n // 6 decimals for USDC
           : BigInt(licensePrice) * 1000000000000000000n; // 18 decimals for AVAX
 
-      await writeContractAsync({
+      const tierTx = await writeContractAsync({
+        chainId: FUJI_CHAIN_ID,
         address: CONTRACT_ADDRESSES.licenseManager,
         abi: LICENSE_MANAGER_ABI,
         functionName: "createTier",
         args: [targetContentId, 1, paymentToken, priceUnit, 0n],
       });
 
-      setRegStatus("HOÀN TẤT: Tác phẩm đã được khởi tạo thành công trên Avalanche Fuji!");
+      let createdTierId = Number(targetContentId);
+      if (!isDemo && publicClient) {
+        setRegStatus("Đang chờ mạng Avalanche Fuji xác nhận Bước 3/3...");
+        await publicClient.waitForTransactionReceipt({ hash: tierTx });
+        const totalTiersOnChain = await publicClient.readContract({
+          address: CONTRACT_ADDRESSES.licenseManager,
+          abi: LICENSE_MANAGER_ABI,
+          functionName: "totalTiers",
+        });
+        if (totalTiersOnChain && totalTiersOnChain > 0n) {
+          createdTierId = Number(totalTiersOnChain);
+        }
+      }
+
+      // Lưu sản phẩm mới vào localStorage để hiển thị ngay bên Marketplace khi quay video demo
+      if (typeof window !== "undefined") {
+        const existingRaw = localStorage.getItem("royaltyflow_custom_items");
+        const existingItems = existingRaw ? JSON.parse(existingRaw) : [];
+        const newItem = {
+          tierId: createdTierId,
+          contentId: Number(targetContentId),
+          title: file?.name
+            ? `${file.name.replace(/\.[^/.]+$/, "")} (Tác phẩm #${targetContentId.toString()})`
+            : `Tác phẩm Số RoyaltyFlow #${targetContentId.toString()}`,
+          category: "Music",
+          primaryCreator: address || "0x007055a558eA6C6d7612cE04628Ce46Ad75537c0",
+          licenseType: isDerivative ? "DERIVATIVE_ALLOW" : "COMMERCIAL",
+          price: licensePrice,
+          paymentToken: paymentType,
+          ipfsCid,
+          parentContentId: isDerivative ? parentContentId : 0,
+          upstreamBps: isDerivative ? upstreamBps : 0,
+          splitsSummary: recipients.map((r) => `${r.role} (${r.percentage}%)`).join(" • "),
+          isFrozen: false,
+        };
+        localStorage.setItem(
+          "royaltyflow_custom_items",
+          JSON.stringify([newItem, ...existingItems])
+        );
+      }
+
+      setRegStatus(
+        `HOÀN TẤT: Tác phẩm #${targetContentId.toString()} (Gói License #${createdTierId}) đã lên Chợ Bản Quyền (/marketplace)!`
+      );
     } catch (err: any) {
       console.error(err);
       setRegStatus(`LỖI: ${err?.shortMessage || err?.message || "Giao dịch bị từ chối"}`);

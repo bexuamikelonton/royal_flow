@@ -1,5 +1,55 @@
 import { http, createConfig, injected } from "wagmi";
-import { avalancheFuji, hardhat } from "wagmi/chains";
+import { avalancheFuji } from "wagmi/chains";
+
+export const FUJI_CHAIN_ID = 43113;
+export const FUJI_HEX_CHAIN_ID = "0xa869";
+
+/**
+ * Tự động yêu cầu ví Web3 (MetaMask / Core / OKX...) chuyển sang mạng Avalanche Fuji C-Chain (43113).
+ * Nếu ví chưa có mạng Fuji, tự động thêm mạng Fuji vào ví.
+ */
+export async function ensureAvalancheFuji(): Promise<void> {
+  if (typeof window === "undefined") return;
+  const eth = (window as any).ethereum;
+  if (!eth || eth.isRoyaltyFlowDemo) return;
+
+  try {
+    const currentChainHex = await eth.request({ method: "eth_chainId" });
+    if (
+      typeof currentChainHex === "string" &&
+      currentChainHex.toLowerCase() === FUJI_HEX_CHAIN_ID
+    ) {
+      return;
+    }
+
+    await eth.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: FUJI_HEX_CHAIN_ID }],
+    });
+  } catch (switchError: any) {
+    // Mã lỗi 4902: Ví chưa từng thêm mạng Avalanche Fuji
+    if (switchError?.code === 4902 || switchError?.data?.originalError?.code === 4902) {
+      await eth.request({
+        method: "wallet_addEthereumChain",
+        params: [
+          {
+            chainId: FUJI_HEX_CHAIN_ID,
+            chainName: "Avalanche Fuji Testnet",
+            nativeCurrency: {
+              name: "Avalanche",
+              symbol: "AVAX",
+              decimals: 18,
+            },
+            rpcUrls: ["https://api.avax-test.network/ext/bc/C/rpc"],
+            blockExplorerUrls: ["https://testnet.snowtrace.io/"],
+          },
+        ],
+      });
+    } else {
+      console.warn("Could not auto-switch to Avalanche Fuji:", switchError);
+    }
+  }
+}
 
 export const DEMO_ACCOUNTS = [
   {
@@ -124,13 +174,12 @@ if (typeof window !== "undefined" && !(window as any).ethereum) {
 }
 
 export const config = createConfig({
-  chains: [avalancheFuji, hardhat],
+  chains: [avalancheFuji],
   connectors: [injected()],
   transports: {
     [avalancheFuji.id]: http(
       process.env.NEXT_PUBLIC_RPC_URL || "https://api.avax-test.network/ext/bc/C/rpc"
     ),
-    [hardhat.id]: http("http://127.0.0.1:8545"),
   },
   ssr: true,
 });

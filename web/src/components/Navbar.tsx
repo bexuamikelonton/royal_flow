@@ -4,7 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAccount, useConnect, useDisconnect, useBalance, injected } from "wagmi";
 import { useState, useEffect } from "react";
-import { DEMO_ACCOUNTS, installDemoEthereumProvider } from "@/lib/config";
+import {
+  DEMO_ACCOUNTS,
+  installDemoEthereumProvider,
+  ensureAvalancheFuji,
+  FUJI_CHAIN_ID,
+} from "@/lib/config";
 import {
   Layers,
   Sparkles,
@@ -45,14 +50,16 @@ export function Navbar() {
       ) {
         installDemoEthereumProvider(DEMO_ACCOUNTS[0].address);
         setIsDemoWallet(true);
+      } else {
+        await ensureAvalancheFuji();
       }
-      await connectAsync({ connector: injected() });
+      await connectAsync({ connector: injected(), chainId: FUJI_CHAIN_ID });
     } catch (err) {
       // Nếu ví trình duyệt bị khoá / từ chối / lỗi, tự động chuyển sang Ví Mô Phỏng để người dùng test mượt mà
       installDemoEthereumProvider(DEMO_ACCOUNTS[0].address);
       setIsDemoWallet(true);
       try {
-        await connectAsync({ connector: injected() });
+        await connectAsync({ connector: injected(), chainId: FUJI_CHAIN_ID });
       } catch (innerErr) {
         console.error("Wallet connect error:", innerErr);
       }

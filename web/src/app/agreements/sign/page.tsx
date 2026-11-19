@@ -15,6 +15,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { CONTRACT_ADDRESSES } from "@/lib/contracts";
+import { ensureAvalancheFuji } from "@/lib/config";
 
 interface PendingAgreement {
   id: string;
@@ -82,9 +83,10 @@ export default function SignAgreementsPage() {
     }
 
     setSigningId(agr.id);
-    setStatusMsg(`Đang khởi tạo thông điệp EIP-712 cho "${agr.title}"...`);
+    setStatusMsg(`Đang kiểm tra mạng Avalanche Fuji và khởi tạo thông điệp EIP-712 cho "${agr.title}"...`);
 
     try {
+      await ensureAvalancheFuji();
       // EIP-712 Typed Data Domain & Types definition
       const domain = {
         name: "RoyaltyFlow",
