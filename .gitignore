@@ -1,53 +1,8 @@
-# Dependencies
 node_modules/
-.pnp
-.pnp.js
-
-# Environment variables
-.env
+.next/
+out/
+build/
 .env.local
-.env.*.local
-
-# Python / FastAPI
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-.venv/
-ENV/
-*.egg-info/
-.pytest_cache/
-
-# Next.js
-web/.next/
-web/out/
-
-# Hardhat
-contracts/cache/
-contracts/artifacts/
-contracts/typechain-types/
-
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# OS / Editor
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-.idea/
-.vscode/
-
-# Node.js standalone runtime
-.node/
-royaltyflow.db
-deployments/
+.env.development.local
+.env.test.local
+.env.production.local
